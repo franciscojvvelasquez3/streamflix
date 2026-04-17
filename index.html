@@ -251,15 +251,38 @@
 
         // --- NAVEGACIÓN ---
         async function changeType(type) {
-            currentType = type; currentCat = 'all';
-            document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
-            if(dataStore[type].length === 0) {
-                const aS = { live: 'get_live_streams', movie: 'get_vod_streams', series: 'get_series' }, aC = { live: 'get_live_categories', movie: 'get_vod_categories', series: 'get_series_categories' };
-                await Promise.all([fetchData(type+'_cats', aC[type]), fetchData(type, aS[type])]);
-            }
-            renderSidebar(type); updateFilteredData(); renderGrid(false);
+    currentType = type; 
+    currentCat = 'all';
+    
+    // Limpiamos la pantalla y mostramos que está cargando
+    document.getElementById('content-grid').innerHTML = "<p style='padding:20px;'>Cargando contenido...</p>";
+    
+    // Actualizar pestañas activas
+    document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+    if(event && event.target) event.target.classList.add('active');
+
+    // Si no tenemos los datos de esta categoría (Cine o Series), los buscamos
+    if(dataStore[type].length === 0) {
+        const aS = { live: 'get_live_streams', movie: 'get_vod_streams', series: 'get_series' };
+        const aC = { live: 'get_live_categories', movie: 'get_vod_categories', series: 'get_series_categories' };
+        
+        try {
+            // Usamos el mismo sistema de fetchData que ya te funciona
+            await Promise.all([
+                fetchData(type + '_cats', aC[type]), 
+                fetchData(type, aS[type])
+            ]);
+        } catch (error) {
+            console.error("Error cargando sección:", error);
+            document.getElementById('content-grid').innerHTML = "<p style='padding:20px; color:red;'>Error al cargar. Reintenta por favor.</p>";
+            return;
         }
+    }
+    
+    renderSidebar(type); 
+    updateFilteredData(); 
+    renderGrid(false);
+}
 
         function renderSidebar(type) {
             const side = document.getElementById('sidebar-cats');
