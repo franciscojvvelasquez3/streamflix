@@ -1,0 +1,23 @@
+{
+  "name": "StreamFlix IPTV Pro",
+  "short_name": "StreamFlix",
+  "description": "Tu plataforma premium de streaming",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#141414",
+  "theme_color": "#E50914",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "https://via.placeholder.com/192x192/E50914/FFFFFF?text=SF",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://via.placeholder.com/512x512/E50914/FFFFFF?text=StreamFlix",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

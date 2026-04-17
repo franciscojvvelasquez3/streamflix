@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>StreamFlix Pro PWA</title>
+    
+    <link href="https://vjs.zencdn.net/7.20.3/video-js.css" rel="stylesheet" />
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+
+    <style>
+        :root { --netflix-red: #E50914; --dark-bg: #141414; --card-bg: #1f1f1f; }
+        body { background-color: var(--dark-bg); color: white; font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; overflow: hidden; }
+        
+        /* LOGIN */
+        #login-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 20px; }
+        .login-box { background: rgba(0,0,0,0.9); padding: 40px; border-radius: 8px; width: 100%; max-width: 350px; text-align: center; border: 1px solid #333; }
+        .login-box h1 { color: var(--netflix-red); margin-bottom: 25px; }
+        .login-box input { width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 4px; border: none; background: #333; color: white; box-sizing: border-box; }
+        .login-box button { width: 100%; padding: 14px; background: var(--netflix-red); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+
+        /* ESTRUCTURA */
+        #main-app { display: none; flex-direction: column; height: 100vh; }
+        header { background: #000; padding: 0 4%; display: flex; align-items: center; justify-content: space-between; min-height: 70px; z-index: 100; border-bottom: 1px solid #222; }
+        .header-left { display: flex; align-items: center; gap: 20px; }
+        .logo { color: var(--netflix-red); font-weight: bold; font-size: 1.5rem; }
+        .nav-tabs { display: flex; gap: 15px; }
+        .tab-link { cursor: pointer; color: #b3b3b3; font-size: 0.9rem; padding: 5px 0; }
+        .tab-link.active { color: white; font-weight: bold; border-bottom: 2px solid var(--netflix-red); }
+
+        .layout { display: flex; flex: 1; overflow: hidden; }
+        .sidebar { width: 250px; background: #000; overflow-y: auto; border-right: 1px solid #222; padding: 10px; flex-shrink: 0; }
+        .category-item { padding: 12px; font-size: 0.85rem; color: #808080; cursor: pointer; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .category-item.active-cat { color: white; background: var(--netflix-red); font-weight: bold; }
+
+        .main-content { flex: 1; overflow-y: auto; background: var(--dark-bg); }
+        .video-container { width: 100%; background: #000; position: sticky; top: 0; z-index: 50; max-height: 45vh; border-bottom: 2px solid #222; display: flex; justify-content: center; }
+        .video-js { width: 100% !important; height: 45vh !important; }
+
+        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 20px; padding: 25px; padding-bottom: 100px; }
+        .card { background: var(--card-bg); border-radius: 4px; cursor: pointer; text-align: center; overflow: hidden; transition: 0.3s; position: relative; }
+        .card:hover { transform: scale(1.05); z-index: 10; outline: 2px solid white; }
+        .card img { width: 100%; height: 230px; object-fit: cover; }
+        .card p { padding: 10px; margin: 0; font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* MODAL SERIES */
+        #series-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.98); z-index:10000; overflow-y:auto; padding:20px; }
+        .modal-body { max-width: 1000px; margin: auto; }
+        .episode-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; margin-top: 20px; padding-bottom: 50px; }
+        
+        /* RESPONSIVO MÓVIL */
+        @media (max-width: 768px) {
+            .layout { flex-direction: column; }
+            .sidebar { 
+                width: 100%; height: auto; display: flex; flex-direction: row; 
+                overflow-x: auto; padding: 10px; border-right: none; border-bottom: 1px solid #222;
+                scrollbar-width: none; -webkit-overflow-scrolling: touch;
+            }
+            .sidebar::-webkit-scrollbar { display: none; }
+            .category-item { padding: 8px 15px; background: #222; border-radius: 20px; margin-right: 8px; flex-shrink: 0; }
+            .video-js { height: 30vh !important; }
+            .grid { grid-template-columns: repeat(2, 1fr); gap: 10px; padding: 10px; }
+            .card img { height: 180px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="login-overlay">
+        <div class="login-box">
+            <h1>STREAMFLIX</h1>
+            <input type="text" id="user" placeholder="Usuario">
+            <input type="password" id="pass" placeholder="Contraseña">
+            <button onclick="initApp()">Entrar</button>
+            <p id="status" style="font-size: 0.8rem; margin-top: 15px; color: #666;"></p>
+        </div>
+    </div>
+
+    <div id="main-app">
+        <header>
+            <div class="header-left">
+                <div class="logo">STREAMFLIX</div>
+                <nav class="nav-tabs">
+                    <div class="tab-link active" onclick="changeType('live')">TV</div>
+                    <div class="tab-link" onclick="changeType('movie')">Cine</div>
+                    <div class="tab-link" onclick="changeType('series')">Series</div>
+                </nav>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <input type="text" id="search-input" placeholder="Buscar..." oninput="handleSearch()" style="padding:6px; border-radius:15px; border:none; background:#222; color:white; width:100px;">
+                <button onclick="logout()" style="background:none; border:1px solid #444; color:#666; padding:4px 8px; border-radius:4px; font-size:0.7rem; cursor:pointer;">Salir</button>
+            </div>
+        </header>
+        <div class="layout">
+            <aside class="sidebar" id="sidebar-cats"></aside>
+            <main class="main-content" id="scroll-target">
+                <div class="video-container">
+                    <video id="player" class="video-js vjs-big-play-centered" controls preload="auto"></video>
+                </div>
+                <div id="content-grid" class="grid"></div>
+            </main>
+        </div>
+    </div>
+
+    <div id="series-modal">
+        <div class="modal-body">
+            <button onclick="closeSeries()" style="float:right; background:var(--netflix-red); color:white; border:none; padding:10px 20px; cursor:pointer; font-weight:bold; border-radius:4px;">CERRAR</button>
+            <h1 id="modal-title">...</h1>
+            <div id="season-selector" style="display:flex; gap:10px; overflow-x:auto; padding:10px 0;"></div>
+            <div id="episode-list" class="episode-grid"></div>
+        </div>
+    </div>
+
+    <script src="https://vjs.zencdn.net/7.20.3/video.min.js"></script>
+    <script>
+        // --- CONFIGURACIÓN REPRODUCTOR ---
+        const player = videojs('player', {
+            controlBar: { children: ['playToggle', 'volumePanel', 'currentTimeDisplay', 'timeDivider', 'durationDisplay', 'progressControl', 'liveDisplay', 'subsCapsButton', 'audioTrackButton', 'fullscreenToggle'] },
+            html5: { vhs: { overrideNative: true }, nativeAudioTracks: false }
+        });
+
+        const server = "http://tvpremium.pro:80";
+        let creds = { user: "", pass: "" };
+        let currentType = 'live', currentCat = 'all', currentPage = 1, filteredData = [];
+        let dataStore = { live: [], movie: [], series: [], cats: { live: [], movie: [], series: [] } };
+        let currentMediaId = null;
+
+        // --- LÓGICA DE SESIÓN ---
+        window.onload = () => {
+            const u = localStorage.getItem('iptv_user'), p = localStorage.getItem('iptv_pass');
+            if(u && p) { document.getElementById('user').value = u; document.getElementById('pass').value = p; initApp(); }
+        };
+
+        function logout() { if(confirm("¿Cerrar sesión?")) { localStorage.clear(); location.reload(); } }
+
+        async function initApp() {
+            creds.user = document.getElementById('user').value;
+            creds.pass = document.getElementById('pass').value;
+            if(!creds.user || !creds.pass) return;
+            localStorage.setItem('iptv_user', creds.user); localStorage.setItem('iptv_pass', creds.pass);
+            document.getElementById('status').innerText = "Cargando...";
+            try {
+                await Promise.all([fetchData('live_cats', 'get_live_categories'), fetchData('live', 'get_live_streams')]);
+                document.getElementById('login-overlay').style.display = 'none';
+                document.getElementById('main-app').style.display = 'flex';
+                renderSidebar('live'); updateFilteredData(); renderGrid(false);
+            } catch (e) { document.getElementById('status').innerText = "Error de conexión."; }
+        }
+
+        async function fetchData(key, action) {
+            const resp = await fetch(`${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`);
+            const data = await resp.json();
+            if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
+            else dataStore[key] = data;
+        }
+
+        // --- REPRODUCCIÓN Y RESUME ---
+        player.on('timeupdate', () => {
+            if (currentMediaId && currentType !== 'live' && !player.paused()) {
+                localStorage.setItem('time_' + currentMediaId, player.currentTime());
+            }
+        });
+
+        async function playMedia(item, isEpisode = false) {
+            if (!isEpisode && currentType === 'series') { openSeriesModal(item.series_id, item.name); return; }
+            currentMediaId = item.stream_id || item.id;
+            let url = (currentType === 'live') ? `${server}/live/${creds.user}/${creds.pass}/${item.stream_id}.m3u8` : 
+                      (currentType === 'movie') ? `${server}/movie/${creds.user}/${creds.pass}/${item.stream_id}.${item.container_extension || 'mp4'}` :
+                      `${server}/series/${creds.user}/${creds.pass}/${item.id}.${item.container_extension || 'mp4'}`;
+
+            player.src({ src: url, type: (currentType === 'live' ? 'application/x-mpegURL' : 'video/mp4') });
+            const savedTime = localStorage.getItem('time_' + currentMediaId);
+            player.one('loadedmetadata', () => { if (savedTime && currentType !== 'live') player.currentTime(parseFloat(savedTime)); });
+            player.play();
+            if(isEpisode) closeSeries();
+            document.getElementById('scroll-target').scrollTop = 0;
+        }
+
+        // --- SERIES ---
+        async function openSeriesModal(id, title) {
+            document.getElementById('modal-title').innerText = title;
+            document.getElementById('series-modal').style.display = 'block';
+            const res = await fetch(`${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=get_series_info&series_id=${id}`);
+            const data = await res.json();
+            const episodes = data.episodes || {}, seasonsDiv = document.getElementById('season-selector');
+            seasonsDiv.innerHTML = "";
+            Object.keys(episodes).forEach(s => {
+                const btn = document.createElement('button');
+                btn.innerText = "Temporada " + s;
+                btn.style = "padding:8px 15px; background:#333; color:white; border:none; cursor:pointer; border-radius:20px; white-space:nowrap;";
+                btn.onclick = (e) => { 
+                    document.querySelectorAll('#season-selector button').forEach(b => b.style.background = "#333");
+                    e.target.style.background = "var(--netflix-red)";
+                    renderEpisodes(episodes[s]);
+                };
+                seasonsDiv.appendChild(btn);
+            });
+            if(seasonsDiv.firstChild) seasonsDiv.firstChild.click();
+        }
+
+        function renderEpisodes(eps) {
+            const list = document.getElementById('episode-list'); list.innerHTML = "";
+            let viewed = JSON.parse(localStorage.getItem('viewed_eps') || "[]");
+            eps.forEach(ep => {
+                const isV = viewed.includes(ep.id);
+                const d = document.createElement('div');
+                d.style = `background:#222; border-radius:8px; overflow:hidden; border:2px solid ${isV ? 'var(--netflix-red)' : '#444'}; cursor:pointer; transition:0.3s; opacity:${isV ? '0.7' : '1'}`;
+                d.innerHTML = `<img src="${ep.info.movie_image || 'https://via.placeholder.com/300x150?text=EP'}" style="width:100%; height:140px; object-fit:cover;"><div style="padding:10px;"><p style="font-size:0.8rem; font-weight:bold; margin:0; ${isV ? 'color:var(--netflix-red)' : ''}">${isV ? '✓ ' : ''}E${ep.episode_num}: ${ep.title}</p></div>`;
+                d.onclick = () => { if(!viewed.includes(ep.id)) { viewed.push(ep.id); localStorage.setItem('viewed_eps', JSON.stringify(viewed)); } playMedia(ep, true); };
+                d.onmouseover = () => d.style.transform = "scale(1.02)";
+                d.onmouseout = () => d.style.transform = "scale(1)";
+                list.appendChild(d);
+            });
+        }
+
+        // --- NAVEGACIÓN ---
+        async function changeType(type) {
+            currentType = type; currentCat = 'all';
+            document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+            if(dataStore[type].length === 0) {
+                const aS = { live: 'get_live_streams', movie: 'get_vod_streams', series: 'get_series' }, aC = { live: 'get_live_categories', movie: 'get_vod_categories', series: 'get_series_categories' };
+                await Promise.all([fetchData(type+'_cats', aC[type]), fetchData(type, aS[type])]);
+            }
+            renderSidebar(type); updateFilteredData(); renderGrid(false);
+        }
+
+        function renderSidebar(type) {
+            const side = document.getElementById('sidebar-cats');
+            side.innerHTML = `<div class="category-item active-cat" onclick="filterByCat('all', this)">Todos</div>`;
+            dataStore.cats[type].forEach(cat => {
+                const div = document.createElement('div'); div.className = 'category-item'; div.innerText = cat.category_name;
+                div.onclick = () => filterByCat(cat.category_id, div);
+                side.appendChild(div);
+            });
+        }
+
+        function filterByCat(id, el) {
+            currentCat = id;
+            document.querySelectorAll('.category-item').forEach(c => c.classList.remove('active-cat'));
+            el.classList.add('active-cat');
+            el.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+            updateFilteredData(); renderGrid(false);
+        }
+
+        function updateFilteredData() {
+            const q = document.getElementById('search-input').value.toLowerCase();
+            let d = dataStore[currentType] || [];
+            if(currentCat !== 'all') d = d.filter(i => String(i.category_id) === String(currentCat));
+            if(q) d = d.filter(i => (i.name || i.title).toLowerCase().includes(q));
+            filteredData = d; currentPage = 1;
+        }
+
+        function renderGrid(append) {
+            const grid = document.getElementById('content-grid');
+            if(!append) grid.innerHTML = "";
+            const start = (currentPage - 1) * 40;
+            filteredData.slice(start, start + 40).forEach(item => {
+                const div = document.createElement('div'); div.className = 'card';
+                div.innerHTML = `<img src="${item.stream_icon || item.cover || 'https://via.placeholder.com/200x300?text=IMG'}" loading="lazy"><p>${item.name}</p>`;
+                div.onclick = () => playMedia(item);
+                grid.appendChild(div);
+            });
+        }
+
+        document.getElementById('scroll-target').onscroll = (e) => {
+            const el = e.target;
+            if (el.scrollHeight - el.scrollTop <= el.clientHeight + 200) {
+                if (currentPage * 40 < filteredData.length) { currentPage++; renderGrid(true); }
+            }
+        };
+
+        function handleSearch() { updateFilteredData(); renderGrid(false); }
+        function closeSeries() { document.getElementById('series-modal').style.display = 'none'; }
+
+        // REGISTRO PWA
+        if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
+    </script>
+</body>
+</html>
