@@ -20,7 +20,16 @@
     <style>
         :root { --netflix-red: #E50914; --dark-bg: #141414; --card-bg: #1f1f1f; }
         body { background-color: var(--dark-bg); color: white; font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; overflow: hidden; }
-        
+        .spinner {
+    width: 40px;
+    height: 40px;
+    border: 4px solid #333;
+    border-top: 4px solid var(--netflix-red);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin: 20px auto;
+}
+@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         /* LOGIN */
         #login-overlay { position: fixed; inset: 0; background: black; z-index: 9999; display: flex; justify-content: center; align-items: center; padding: 20px; }
         .login-box { background: rgba(0,0,0,0.9); padding: 40px; border-radius: 8px; width: 100%; max-width: 350px; text-align: center; border: 1px solid #333; }
@@ -158,36 +167,20 @@
 
        async function fetchData(key, action) {
     const targetUrl = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
-    
-    // Usaremos un proxy que suele ser más permisivo con las cabeceras CORS
     const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
 
-    try {
-        const resp = await fetch(proxyUrl);
-        if (!resp.ok) throw new Error('Error en respuesta del proxy');
-        
-        const data = await resp.json();
-        
-        if(key.includes('_cats')) {
-            dataStore.cats[key.replace('_cats','')] = data;
-        } else {
-            dataStore[key] = data;
-        }
-    } catch (e) {
-        console.error("Fallo con el proxy principal, intentando conexión directa...", e);
-        document.getElementById('status').innerText = "Reintentando conexión...";
-        
-        // Fallback: Intento directo (algunos navegadores lo permiten si el usuario lo autoriza)
-        try {
-            const directResp = await fetch(targetUrl);
-            const directData = await directResp.json();
-            if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = directData;
-            else dataStore[key] = directData;
-        } catch (err) {
-            document.getElementById('status').innerText = "Error de CORS. Por favor, permite 'Contenido no seguro' en el candado del navegador.";
-            throw err;
-        }
+    const resp = await fetch(proxyUrl);
+    if (!resp.ok) throw new Error('Error en proxy');
+    
+    const data = await resp.json();
+    
+    // Si la respuesta es un objeto con error de la API IPTV
+    if (data.user_info && data.user_info.auth === 0) {
+        throw new Error('Auth failed');
     }
+
+    if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
+    else dataStore[key] = data;
 }
 
         // --- REPRODUCCIÓN Y RESUME ---
@@ -250,38 +243,45 @@
         }
 
         // --- NAVEGACIÓN ---
-        async function changeType(type) {
+ async function changeType(type) {
     currentType = type; 
     currentCat = 'all';
     
-    // Limpiamos la pantalla y mostramos que está cargando
-    document.getElementById('content-grid').innerHTML = "<p style='padding:20px;'>Cargando contenido...</p>";
+    const grid = document.getElementById('content-grid');
+    grid.innerHTML = `<div style="padding:20px; text-align:center;">
+        <div class="spinner"></div> 
+        <p>Cargando ${type === 'movie' ? 'Películas' : 'Series'}...<br>
+        <small style="color:gray;">Esto puede tardar unos segundos dependiendo del tamaño de tu lista.</small></p>
+    </div>`;
     
-    // Actualizar pestañas activas
     document.querySelectorAll('.tab-link').forEach(t => t.classList.remove('active'));
     if(event && event.target) event.target.classList.add('active');
 
-    // Si no tenemos los datos de esta categoría (Cine o Series), los buscamos
-    if(dataStore[type].length === 0) {
-        const aS = { live: 'get_live_streams', movie: 'get_vod_streams', series: 'get_series' };
-        const aC = { live: 'get_live_categories', movie: 'get_vod_categories', series: 'get_series_categories' };
-        
-        try {
-            // Usamos el mismo sistema de fetchData que ya te funciona
-            await Promise.all([
-                fetchData(type + '_cats', aC[type]), 
-                fetchData(type, aS[type])
-            ]);
-        } catch (error) {
-            console.error("Error cargando sección:", error);
-            document.getElementById('content-grid').innerHTML = "<p style='padding:20px; color:red;'>Error al cargar. Reintenta por favor.</p>";
-            return;
+    try {
+        // CARGA SECUENCIAL (Primero categorías, luego contenido) para no saturar el proxy
+        if (dataStore.cats[type].length === 0) {
+            const aC = { live: 'get_live_categories', movie: 'get_vod_categories', series: 'get_series_categories' };
+            await fetchData(type + '_cats', aC[type]);
+            renderSidebar(type); // Dibujamos el sidebar en cuanto tengamos las categorías
+        } else {
+            renderSidebar(type);
         }
+
+        if (dataStore[type].length === 0) {
+            const aS = { live: 'get_live_streams', movie: 'get_vod_streams', series: 'get_series' };
+            await fetchData(type, aS[type]);
+        }
+        
+        updateFilteredData(); 
+        renderGrid(false);
+    } catch (error) {
+        console.error("Error detallado:", error);
+        grid.innerHTML = `
+            <div style="padding:20px; text-align:center;">
+                <p style="color:var(--netflix-red);">⚠️ No se pudo cargar el contenido</p>
+                <button onclick="changeType('${type}')" style="padding:10px; background:#333; color:white; border:none; border-radius:4px; cursor:pointer;">Reintentar</button>
+            </div>`;
     }
-    
-    renderSidebar(type); 
-    updateFilteredData(); 
-    renderGrid(false);
 }
 
         function renderSidebar(type) {
