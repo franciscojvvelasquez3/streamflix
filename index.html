@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>StreamFlix Pro PWA</title>
@@ -9,7 +10,13 @@
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#E50914">
 
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="StreamFlix">
+<link rel="apple-touch-icon" href="https://via.placeholder.com/192x192/E50914/FFFFFF?text=SF">
     <style>
         :root { --netflix-red: #E50914; --dark-bg: #141414; --card-bg: #1f1f1f; }
         body { background-color: var(--dark-bg); color: white; font-family: 'Helvetica Neue', Arial, sans-serif; margin: 0; overflow: hidden; }
@@ -150,11 +157,17 @@
         }
 
         async function fetchData(key, action) {
-            const resp = await fetch(`${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`);
-            const data = await resp.json();
-            if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
-            else dataStore[key] = data;
-        }
+    // Usamos este proxy para evitar el bloqueo de CORS y Mixed Content
+    const proxy = "https://api.allorigins.win/raw?url=";
+    const targetUrl = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
+    
+    // Concatenamos el proxy con la URL real
+    const resp = await fetch(proxy + encodeURIComponent(targetUrl));
+    const data = await resp.json();
+    
+    if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
+    else dataStore[key] = data;
+}
 
         // --- REPRODUCCIÓN Y RESUME ---
         player.on('timeupdate', () => {
@@ -278,5 +291,14 @@
         // REGISTRO PWA
         if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
     </script>
+    <script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('PWA: Sistema activo'))
+        .catch(err => console.log('PWA: Error de registro', err));
+    });
+  }
+</script>
 </body>
 </html>
