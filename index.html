@@ -156,17 +156,38 @@
             } catch (e) { document.getElementById('status').innerText = "Error de conexión."; }
         }
 
-        async function fetchData(key, action) {
-    // Usamos este proxy para evitar el bloqueo de CORS y Mixed Content
-    const proxy = "https://api.allorigins.win/raw?url=";
+       async function fetchData(key, action) {
     const targetUrl = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
     
-    // Concatenamos el proxy con la URL real
-    const resp = await fetch(proxy + encodeURIComponent(targetUrl));
-    const data = await resp.json();
-    
-    if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
-    else dataStore[key] = data;
+    // Usaremos un proxy que suele ser más permisivo con las cabeceras CORS
+    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
+
+    try {
+        const resp = await fetch(proxyUrl);
+        if (!resp.ok) throw new Error('Error en respuesta del proxy');
+        
+        const data = await resp.json();
+        
+        if(key.includes('_cats')) {
+            dataStore.cats[key.replace('_cats','')] = data;
+        } else {
+            dataStore[key] = data;
+        }
+    } catch (e) {
+        console.error("Fallo con el proxy principal, intentando conexión directa...", e);
+        document.getElementById('status').innerText = "Reintentando conexión...";
+        
+        // Fallback: Intento directo (algunos navegadores lo permiten si el usuario lo autoriza)
+        try {
+            const directResp = await fetch(targetUrl);
+            const directData = await directResp.json();
+            if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = directData;
+            else dataStore[key] = directData;
+        } catch (err) {
+            document.getElementById('status').innerText = "Error de CORS. Por favor, permite 'Contenido no seguro' en el candado del navegador.";
+            throw err;
+        }
+    }
 }
 
         // --- REPRODUCCIÓN Y RESUME ---
