@@ -169,27 +169,29 @@
     const url = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
     
     try {
+        // Intentamos la conexión directa
         const resp = await fetch(url);
         
-        // Si el navegador bloquea la lectura del JSON por ser HTTP, 
-        // intentamos una segunda vía usando un proxy alternativo que NO se satura
-        if (!resp.ok) throw new Error();
+        if (!resp.ok) throw new Error('Network response was not ok');
         
         const data = await resp.json();
+        
         if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
         else dataStore[key] = data;
-        
+
     } catch (e) {
-        console.log("Fallo conexión directa, usando puente de emergencia...");
-        // PUENTE DE EMERGENCIA: Usamos AllOrigins pero con un método que evita el error anterior
-        const bridge = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        console.error("Error de conexión directa:", e);
         
-        const resp = await fetch(bridge);
-        const json = await resp.json();
-        const data = JSON.parse(json.contents); // Extraemos el contenido real
-        
-        if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
-        else dataStore[key] = data;
+        // Si falla, es 99% seguro que es por el bloqueo HTTPS -> HTTP de GitHub
+        document.getElementById('status').innerHTML = `
+            <div style="color: #ffcc00; background: rgba(255,204,0,0.1); padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 0.75rem;">
+                <strong>⚠️ Bloqueo de seguridad detectado:</strong><br>
+                Para entrar, haz clic en el icono del candado (arriba junto a la URL), ve a 
+                "Configuración del sitio" y cambia <b>Contenido no seguro</b> a <b>Permitir</b>. 
+                Luego recarga esta página.
+            </div>
+        `;
+        throw e;
     }
 }
 
