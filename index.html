@@ -166,15 +166,31 @@
         }
 
        async function fetchData(key, action) {
-    // Conexión directa sin intermediarios
     const url = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
     
-    const resp = await fetch(url);
-    if (!resp.ok) throw new Error('Error de red');
-    
-    const data = await resp.json();
-    if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
-    else dataStore[key] = data;
+    try {
+        const resp = await fetch(url);
+        
+        // Si el navegador bloquea la lectura del JSON por ser HTTP, 
+        // intentamos una segunda vía usando un proxy alternativo que NO se satura
+        if (!resp.ok) throw new Error();
+        
+        const data = await resp.json();
+        if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
+        else dataStore[key] = data;
+        
+    } catch (e) {
+        console.log("Fallo conexión directa, usando puente de emergencia...");
+        // PUENTE DE EMERGENCIA: Usamos AllOrigins pero con un método que evita el error anterior
+        const bridge = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        
+        const resp = await fetch(bridge);
+        const json = await resp.json();
+        const data = JSON.parse(json.contents); // Extraemos el contenido real
+        
+        if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
+        else dataStore[key] = data;
+    }
 }
 
         // --- REPRODUCCIÓN Y RESUME ---
