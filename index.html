@@ -166,19 +166,13 @@
         }
 
        async function fetchData(key, action) {
-    const targetUrl = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
-    const proxyUrl = `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`;
-
-    const resp = await fetch(proxyUrl);
-    if (!resp.ok) throw new Error('Error en proxy');
+    // Conexión directa sin intermediarios
+    const url = `${server}/player_api.php?username=${creds.user}&password=${creds.pass}&action=${action}`;
+    
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('Error de red');
     
     const data = await resp.json();
-    
-    // Si la respuesta es un objeto con error de la API IPTV
-    if (data.user_info && data.user_info.auth === 0) {
-        throw new Error('Auth failed');
-    }
-
     if(key.includes('_cats')) dataStore.cats[key.replace('_cats','')] = data;
     else dataStore[key] = data;
 }
